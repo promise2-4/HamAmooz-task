@@ -83,6 +83,25 @@ class AnalyzerTests(unittest.TestCase):
         self.assertEqual(result.selected_requests, 1)
         self.assertEqual(result.filtered_out_requests, 2)
 
+    def test_login_failures_and_suspicious_5xx_are_aggregated_and_bounded(self) -> None:
+        login = valid("192.0.2.9", "01/Jun/2026:00:00:00 +0000", "/login", 401)
+        suspicious_500 = valid(
+            "192.0.2.8", "01/Jun/2026:00:01:00 +0000", "/../../etc/passwd", 500
+        )
+        suspicious_200 = valid(
+            "192.0.2.7", "01/Jun/2026:00:02:00 +0000", "/.env", 200
+        )
+        options = AnalyzerOptions(login_failure_threshold=3, security_example_limit=1)
+        result = self.analyze(
+            ("\n".join([login, login, login, suspicious_500, suspicious_200]) + "\n").encode(),
+            options,
+        )
+        self.assertEqual(result.login_failure_offenders["192.0.2.9"], 3)
+        self.assertEqual(len(result.suspicious_samples), 1)
+        self.assertEqual(len(result.suspicious_5xx_samples), 1)
+        self.assertIn("path_traversal", result.suspicious_5xx_samples[0].categories)
+        self.assertNotIn("?", result.suspicious_5xx_samples[0].target_sample)
+
 
 if __name__ == "__main__":
     unittest.main()

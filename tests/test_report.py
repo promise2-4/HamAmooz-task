@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from log_analyzer.analyzer import analyze_path
-from log_analyzer.report import hourly_series, render_text, sanitize_text
+from log_analyzer.report import hourly_series, render_json, render_text, sanitize_text
 
 
 class ReportTests(unittest.TestCase):
@@ -37,6 +38,14 @@ class ReportTests(unittest.TestCase):
             output = render_text(analyze_path(path))
         self.assertIn("No requests", output)
         self.assertIn("Error rate: 0.00%", output)
+
+    def test_json_report_is_valid_for_empty_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "empty.log")
+            path.touch()
+            document = json.loads(render_json(analyze_path(path)))
+        self.assertEqual(document["summary"]["valid_requests"], 0)
+        self.assertIsInstance(document["summary"]["error_rate_percent"], float)
 
 
 if __name__ == "__main__":

@@ -38,6 +38,27 @@ class MalformedExample:
 
 
 @dataclass(frozen=True, slots=True)
+class SuspiciousSample:
+    timestamp: datetime
+    ip: str
+    method: str
+    endpoint: str
+    status: int
+    categories: tuple[str, ...]
+    target_sample: str
+
+
+@dataclass(frozen=True, slots=True)
+class ServerErrorSpike:
+    hour: datetime
+    total_requests: int
+    server_errors: int
+    hourly_rate: float
+    global_rate: float
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class AnalysisResult:
     input_path: str
     file_size: int | None
@@ -54,6 +75,18 @@ class AnalysisResult:
     status_counts: Counter[int]
     hourly_counts: Counter[datetime]
     status_class_counts: Counter[str]
+    hourly_5xx_counts: Counter[datetime]
+    suspicious_category_counts: Counter[str]
+    suspicious_endpoint_counts: Counter[str]
+    suspicious_ip_counts: Counter[str]
+    suspicious_samples: tuple[SuspiciousSample, ...]
+    suspicious_5xx_samples: tuple[SuspiciousSample, ...]
+    suspicious_5xx_category_counts: Counter[str]
+    suspicious_5xx_endpoint_counts: Counter[str]
+    suspicious_5xx_ip_counts: Counter[str]
+    login_failure_counts: Counter[str]
+    login_failure_threshold: int
+    server_error_spikes: tuple[ServerErrorSpike, ...]
     elapsed_seconds: float
 
     @property
@@ -81,3 +114,13 @@ class AnalysisResult:
         if self.compressed or self.file_size is None or self.elapsed_seconds <= 0:
             return None
         return self.file_size / (1024 * 1024) / self.elapsed_seconds
+
+    @property
+    def login_failure_offenders(self) -> Counter[str]:
+        return Counter(
+            {
+                ip: count
+                for ip, count in self.login_failure_counts.items()
+                if count >= self.login_failure_threshold
+            }
+        )

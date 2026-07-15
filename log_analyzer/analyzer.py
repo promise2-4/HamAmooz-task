@@ -9,9 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .io_utils import DEFAULT_MAX_LINE_LENGTH, iter_bounded_lines, open_binary_input
-from .models import AnalysisResult, MalformedExample
+from .models import AnalysisResult, MalformedExample, SuspiciousSample
 from .parser import LogParseError, parse_line
 from .report import sanitize_text
+from .security import DEFAULT_AUTH_ENDPOINTS, detect_request_indicators, detect_server_error_spikes
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +21,12 @@ class AnalyzerOptions:
     to_time: datetime | None = None
     max_line_length: int = DEFAULT_MAX_LINE_LENGTH
     malformed_example_limit: int = 5
+    security_example_limit: int = 10
+    login_failure_threshold: int = 10
+    auth_endpoints: frozenset[str] = DEFAULT_AUTH_ENDPOINTS
+    spike_minimum_requests: int = 20
+    spike_rate_floor: float = 5.0
+    spike_baseline_factor: float = 3.0
 
 
 def analyze_path(path: Path, options: AnalyzerOptions | None = None) -> AnalysisResult:
@@ -38,6 +45,16 @@ def analyze_path(path: Path, options: AnalyzerOptions | None = None) -> Analysis
     status_counts: Counter[int] = Counter()
     hourly_counts: Counter[datetime] = Counter()
     status_class_counts: Counter[str] = Counter()
+    hourly_5xx_counts: Counter[datetime] = Counter()
+    suspicious_category_counts: Counter[str] = Counter()
+    suspicious_endpoint_counts: Counter[str] = Counter()
+    suspicious_ip_counts: Counter[str] = Counter()
+    suspicious_samples: list[SuspiciousSample] = []
+    suspicious_5xx_samples: list[SuspiciousSample] = []
+    suspicious_5xx_category_counts: Counter[str] = Counter()
+    suspicious_5xx_endpoint_counts: Counter[str] = Counter()
+    suspicious_5xx_ip_counts: Counter[str] = Counter()
+    login_failure_counts: Counter[str] = Counter()
 
     def record_malformed(line_number: int, reason: str, sample: str) -> None:
         nonlocal malformed_lines
@@ -83,6 +100,37 @@ def analyze_path(path: Path, options: AnalyzerOptions | None = None) -> Analysis
                 minute=0, second=0, microsecond=0
             )
             hourly_counts[hour] += 1
+            if 500 <= entry.status <= 599:
+                hourly_5xx_counts[hour] += 1
+
+            if entry.endpoint.lower() in options.auth_endpoints and entry.status in {401, 403}:
+                login_failure_counts[entry.ip] += 1
+
+            categories = detect_request_indicators(entry)
+            if categories:
+                suspicious_category_counts.update(categories)
+                suspicious_endpoint_counts[entry.endpoint] += 1
+                suspicious_ip_counts[entry.ip] += 1
+                sample = SuspiciousSample(
+                    timestamp=entry.timestamp,
+                    ip=entry.ip,
+                    method=entry.method,
+                    endpoint=sanitize_text(entry.endpoint, limit=160),
+                    status=entry.status,
+                    categories=categories,
+                    # Query values are intentionally excluded from retained samples.
+                    target_sample=sanitize_text(entry.endpoint, limit=160),
+                )
+                if len(suspicious_samples) < options.security_example_limit:
+                    suspicious_samples.append(sample)
+                if (
+                    500 <= entry.status <= 599
+                ):
+                    suspicious_5xx_category_counts.update(categories)
+                    suspicious_5xx_endpoint_counts[entry.endpoint] += 1
+                    suspicious_5xx_ip_counts[entry.ip] += 1
+                    if len(suspicious_5xx_samples) < options.security_example_limit:
+                        suspicious_5xx_samples.append(sample)
 
     elapsed = time.perf_counter() - started
     if total_lines != valid_requests + malformed_lines:
@@ -98,6 +146,19 @@ def analyze_path(path: Path, options: AnalyzerOptions | None = None) -> Analysis
         file_size = path.stat().st_size
     except OSError:
         file_size = None
+    global_5xx_rate = (
+        status_class_counts["5xx"] / selected_requests * 100.0
+        if selected_requests
+        else 0.0
+    )
+    spikes = detect_server_error_spikes(
+        hourly_counts,
+        hourly_5xx_counts,
+        global_5xx_rate=global_5xx_rate,
+        minimum_requests=options.spike_minimum_requests,
+        rate_floor=options.spike_rate_floor,
+        baseline_factor=options.spike_baseline_factor,
+    )
     return AnalysisResult(
         input_path=str(path),
         file_size=file_size,
@@ -114,5 +175,17 @@ def analyze_path(path: Path, options: AnalyzerOptions | None = None) -> Analysis
         status_counts=status_counts,
         hourly_counts=hourly_counts,
         status_class_counts=status_class_counts,
+        hourly_5xx_counts=hourly_5xx_counts,
+        suspicious_category_counts=suspicious_category_counts,
+        suspicious_endpoint_counts=suspicious_endpoint_counts,
+        suspicious_ip_counts=suspicious_ip_counts,
+        suspicious_samples=tuple(suspicious_samples),
+        suspicious_5xx_samples=tuple(suspicious_5xx_samples),
+        suspicious_5xx_category_counts=suspicious_5xx_category_counts,
+        suspicious_5xx_endpoint_counts=suspicious_5xx_endpoint_counts,
+        suspicious_5xx_ip_counts=suspicious_5xx_ip_counts,
+        login_failure_counts=login_failure_counts,
+        login_failure_threshold=options.login_failure_threshold,
+        server_error_spikes=spikes,
         elapsed_seconds=elapsed,
     )
