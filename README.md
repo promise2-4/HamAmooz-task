@@ -63,6 +63,12 @@ total_lines == valid_requests + malformed_lines
 
 Status and hourly counters are also checked against the selected valid-request count.
 
+## One problem I ran into
+
+The most annoying edge case was the line-size limit. A line exactly at the limit should be accepted, but its ending may be either LF or CRLF. At the same time, skipping an oversized line must not consume the valid line after it.
+
+I fixed this by reading at most `limit + 2` bytes, removing the line ending before checking the logical size, and draining only the rest of an oversized line. I added separate tests for LF, CRLF, a final line without a newline, and a valid record immediately after an oversized one.
+
 ## Security checks
 
 The analyzer looks for focused indicators such as path traversal, sensitive-file probes, SQL injection combinations, XSS markers, command injection, unusual methods, and oversized targets. It checks both the raw target and up to two percent-decoded versions.
