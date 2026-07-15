@@ -123,9 +123,7 @@ def analyze_path(path: Path, options: AnalyzerOptions | None = None) -> Analysis
                 )
                 if len(suspicious_samples) < options.security_example_limit:
                     suspicious_samples.append(sample)
-                if (
-                    500 <= entry.status <= 599
-                ):
+                if 500 <= entry.status <= 599:
                     suspicious_5xx_category_counts.update(categories)
                     suspicious_5xx_endpoint_counts[entry.endpoint] += 1
                     suspicious_5xx_ip_counts[entry.ip] += 1

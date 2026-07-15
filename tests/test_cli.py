@@ -67,6 +67,39 @@ class CliSmokeTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(json.loads(stdout.getvalue())["summary"]["selected_requests"], 1)
 
+    def test_mixed_and_oversized_input_recovers_in_text_mode(self) -> None:
+        valid = (
+            b'192.0.2.1 - - [01/Jun/2026:00:00:00 +0000] '
+            b'"GET /ok HTTP/1.1" 200 1 "-" "agent"\n'
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "access.log")
+            path.write_bytes(b"x" * 100 + b"\nmalformed\n" + valid)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                result = main(
+                    [str(path), "--max-line-length", "90", "--show-invalid", "2"]
+                )
+        self.assertEqual(result, 0)
+        self.assertIn("Valid requests: 1", stdout.getvalue())
+        self.assertIn("Malformed lines: 2", stdout.getvalue())
+        self.assertIn("line_too_long: 1", stdout.getvalue())
+
+    def test_corrupt_gzip_returns_nonzero(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "broken.gz")
+            path.write_bytes(b"not a gzip stream")
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                result = main([str(path)])
+        self.assertEqual(result, 2)
+        self.assertIn("unable to analyze", stderr.getvalue())
+
+    def test_invalid_option_exits_nonzero(self) -> None:
+        with redirect_stderr(StringIO()), self.assertRaises(SystemExit) as raised:
+            main(["input.log", "--top", "0"])
+        self.assertNotEqual(raised.exception.code, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

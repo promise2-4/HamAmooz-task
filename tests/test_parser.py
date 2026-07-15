@@ -55,6 +55,9 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(absolute.endpoint, "/a/b")
         self.assertEqual(options.endpoint, "*")
 
+    def test_http_3_protocol_is_accepted(self) -> None:
+        self.assertEqual(parse_line(line(request="GET / HTTP/3")).protocol, "HTTP/3")
+
     def test_numeric_ids_are_not_merged(self) -> None:
         self.assertNotEqual(
             normalize_endpoint("/products/1877"),

@@ -9,8 +9,12 @@ from urllib.parse import unquote
 
 from .models import LogEntry, ServerErrorSpike
 
-COMMON_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
-DEFAULT_AUTH_ENDPOINTS = frozenset({"/login", "/auth", "/signin", "/api/login", "/api/auth"})
+COMMON_METHODS = frozenset(
+    {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+)
+DEFAULT_AUTH_ENDPOINTS = frozenset(
+    {"/login", "/auth", "/signin", "/api/login", "/api/auth"}
+)
 MAX_DECODE_TARGET_LENGTH = 8192
 LONG_TARGET_LENGTH = 2048
 LONG_USER_AGENT_LENGTH = 1024
@@ -61,7 +65,10 @@ def detect_request_indicators(entry: LogEntry) -> tuple[str, ...]:
 
     if len(entry.raw_target) <= MAX_DECODE_TARGET_LENGTH:
         variants = tuple(value.lower() for value in decoded_targets(entry.raw_target))
-        if any("../" in value or "..\\" in value or "/etc/passwd" in value for value in variants):
+        if any(
+            "../" in value or "..\\" in value or "/etc/passwd" in value
+            for value in variants
+        ):
             categories.add("path_traversal")
         if any(_SENSITIVE_PATTERN.search(value) for value in variants):
             categories.add("sensitive_file_probe")

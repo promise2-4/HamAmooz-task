@@ -242,7 +242,9 @@ def result_to_dict(result: AnalysisResult, top: int = 10) -> dict[str, object]:
             "potential_candidate_category_counts": dict(
                 sorted(result.suspicious_5xx_category_counts.items())
             ),
-            "potential_candidate_top_endpoints": result.suspicious_5xx_endpoint_counts.most_common(10),
+            "potential_candidate_top_endpoints": (
+                result.suspicious_5xx_endpoint_counts.most_common(10)
+            ),
             "potential_candidate_top_ips": result.suspicious_5xx_ip_counts.most_common(10),
             "causality_notice": (
                 "Access logs cannot prove crash causality; application logs, traces, "

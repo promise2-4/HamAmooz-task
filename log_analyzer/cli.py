@@ -65,7 +65,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Analyze an Apache/Nginx Combined Log Format file.",
     )
     parser.add_argument("input", type=Path, help="path to the access log")
-    parser.add_argument("--top", type=positive_int, default=10, help="number of endpoints to show")
+    parser.add_argument(
+        "--top", type=positive_int, default=10, help="number of endpoints to show"
+    )
     parser.add_argument(
         "--format", choices=("text", "json"), default="text", help="output format"
     )
@@ -117,10 +119,17 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.from_time is not None and args.to_time is not None and args.from_time >= args.to_time:
+    if (
+        args.from_time is not None
+        and args.to_time is not None
+        and args.from_time >= args.to_time
+    ):
         parser.error("--from must be earlier than --to")
     if not args.input.is_file():
-        print(f"error: input file not found: {sanitize_text(str(args.input))}", file=sys.stderr)
+        print(
+            f"error: input file not found: {sanitize_text(str(args.input))}",
+            file=sys.stderr,
+        )
         return 2
     try:
         result = analyze_path(

@@ -51,6 +51,12 @@ class SecurityTests(unittest.TestCase):
         self.assertIn("unusual_method", self.categories("/", method="PROPFIND"))
         self.assertIn("terminal_control", self.categories("/bad\x1btarget"))
 
+    def test_long_target_and_user_agent(self) -> None:
+        self.assertIn("long_target", self.categories("/" + "a" * 3000))
+        self.assertIn(
+            "long_user_agent", self.categories("/", agent="a" * 2000)
+        )
+
     def test_spike_rule_and_zero_baseline(self) -> None:
         hour = datetime(2026, 6, 1, tzinfo=timezone.utc)
         spikes = detect_server_error_spikes(
